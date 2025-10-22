@@ -1,14 +1,20 @@
-Course: SE301 – Advanced Programming and Design
-Team: 2
+# SE301 – Advanced Programming and Design
 
-Overview
+**Team:** 2
 
-This project is a refactored, concurrent, and high-performance password auditing tool.
-It performs a dictionary attack on a list of SHA-256 password hashes to identify weak passwords efficiently.
+---
 
-The system replaces the legacy monolithic implementation with a modular, multi-threaded design that applies SOLID principles, an O(N + M) lookup optimization, and a live status reporter running on a separate thread.
+## 📘 Overview
 
-Project Structure
+This project is a **refactored, concurrent, and high-performance password auditing tool**.  
+It performs a **dictionary attack** on a list of SHA-256 password hashes to identify weak passwords efficiently.
+
+The system replaces the legacy monolithic implementation with a **modular, multi-threaded design** that applies **SOLID principles**, an **O(N + M) lookup optimization**, and a **live status reporter** running on a separate thread.
+
+---
+
+## 🧱 Project Structure
+```
 .
 ├── src/                      # Java source code (Maven layout)
 │   └── main/java/org/example/
@@ -22,68 +28,90 @@ Project Structure
 ├── target/                   # Maven build output
 ├── pom.xml                   # Maven project configuration
 └── README.md
+```
 
+---
 
-Building the Project
+## ⚙️ Building the Project
 
-From the project root (where pom.xml is):
-
+From the project root (where `pom.xml` is located):
+```bash
 mvn clean package
+```
 
-After a successful build, the runnable JAR (with dependencies) will be in target/, for example:
-
+After a successful build, the runnable JAR (with dependencies) will be in `target/`, for example:
+```
 target/se301-1.1-SNAPSHOT-jar-with-dependencies.jar
+```
 
-Running the Application
+---
 
-Command format:
+## 🚀 Running the Application
 
+### Command Format
+```bash
 java -jar <path_to_jar_file> <path_to_in.txt> <path_to_dictionary.txt> <path_to_out.txt>
+```
 
-Example (Unix / macOS / Linux)
+### Example (Unix / macOS / Linux)
+```bash
 cd /path/to/project
 java -jar target/se301-1.1-SNAPSHOT-jar-with-dependencies.jar \
     datasets/small/in.txt \
     datasets/small/dictionary.txt \
     datasets/small/out2.txt
+```
 
-Example (Windows PowerShell)
+### Example (Windows PowerShell)
+```powershell
 cd C:\path\to\project
 java -jar target\se301-1.1-SNAPSHOT-jar-with-dependencies.jar `
     .\datasets\small\in.txt `
     .\datasets\small\dictionary.txt `
     .\datasets\small\out2.txt
+```
 
-Input / Output formats
-in.txt
+---
+
+## 📄 Input / Output Formats
+
+### `in.txt`
 
 Each line:
-
+```
 username,hashed_password
+```
 
-where hashed_password is the lowercase hex SHA-256.
+where `hashed_password` is the lowercase hex SHA-256.
 
-dictionary.txt
+### `dictionary.txt`
 
 Plain text, one candidate password per line.
 
-out.txt (generated)
+### `out.txt` (generated)
 
 CSV with header:
-
+```
 user_name,hashed_password,plain_password
+```
 
-Order of rows in out.txt is not important.
+Order of rows in `out.txt` is not important.
 
-What to submit (per spec)
+---
 
-src/ – complete source in Maven layout.
+## 📦 What to Submit (per spec)
 
-run.jar – runnable JAR with dependencies (example target/se301-1.1-SNAPSHOT-jar-with-dependencies.jar).
+- **`src/`** – complete source in Maven layout
+- **`run.jar`** – runnable JAR with dependencies (example: `target/se301-1.1-SNAPSHOT-jar-with-dependencies.jar`)
 
-Authors
+---
 
-Team 2 – Advanced Programming and Design (SE301)
-Chun Yik
-Lie Wie Yong Jakob
-Shin Leng
+## 👥 Authors
+
+**Team 2** – Advanced Programming and Design (SE301)
+
+- Chun Yik
+- Lie Wie Yong Jakob
+- Shin Leng
+
+---
