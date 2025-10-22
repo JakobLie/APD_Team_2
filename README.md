@@ -110,8 +110,8 @@ Order of rows in `out.txt` is not important.
 
 **Team 2** – Advanced Programming and Design (SE301)
 
-- Chun Yik
-- Lie Wie Yong Jakob
 - Shin Leng
+- Lim Chun Yik
+- Lie Wie Yong Jakob
 
 ---
