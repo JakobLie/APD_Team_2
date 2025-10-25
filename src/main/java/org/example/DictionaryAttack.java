@@ -2,25 +2,22 @@ package org.example;
 
 import java.io.*;
 import java.nio.file.*;
-import java.security.*;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.nio.charset.StandardCharsets;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class DictionaryAttack {
 
-    static LinkedList<CrackTask> taskQueue = new LinkedList<>();
     static HashMap<String, User> users = new HashMap<>();
-    static ArrayList<String> cracked = new ArrayList<>();
-    static HashMap<String, String> reverseLookupCache = new HashMap<>();
-    static int passwordsFound = 0;
-    static int hashesComputed = 0;
+    static ConcurrentHashMap<String, String> hashToPlain = new ConcurrentHashMap<>();
+    static AtomicInteger passwordsFound = new AtomicInteger(0);
+    static AtomicInteger hashesComputed = new AtomicInteger(0);
 
     public static void main(String[] args) throws Exception {
 
-        // Check if both file paths are provided as command-line arguments
-        if (args.length < 2) {
+        if (args.length < 3) {
             System.out.println("Usage: java -jar <jar-file-name>.jar <input_file> <dictionary_file> <output_file>");
             System.exit(1);
         }
@@ -29,64 +26,105 @@ public class DictionaryAttack {
         String dictionaryPath = args[1];
         String passwordsPath = args[2];
 
-//        String datasetPath = "/Users/kasung/Projects/se301/project/code/se301/src/datasets/large/";
-//
-//        String dictionaryPath = datasetPath + "dictionary.txt";
-//        String usersPath = datasetPath + "in.txt";
-//        String passwordsPath = datasetPath + "out.txt";
-
         long start = System.currentTimeMillis();
+        
+        // Load dictionary and users
         List<String> allPasswords = loadDictionary(dictionaryPath);
         loadUsers(usersPath);
 
-        for (User user : users.values()) {
-            for (String password : allPasswords) {
-                taskQueue.add(new CrackTask(user.username, password));
-            }
-        }
-
-        long totalTasks = taskQueue.size();
-        System.out.println("Starting attack with " + totalTasks + " total tasks...");
-
-
-        while (!taskQueue.isEmpty()) {
-            CrackTask task = taskQueue.poll();
-            if (task != null) task.execute();
-
-            if (taskQueue.size() % 1000 == 0) {
-
-                long remainingTasks = taskQueue.size();
-                long completedTasks = totalTasks - remainingTasks;
-                double progressPercent = (double) completedTasks / totalTasks * 100;
-                DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-                String timestamp = LocalDateTime.now().format(formatter);
-
-                System.out.printf("\r[%s] %.2f%% complete | Passwords Found: %d | Tasks Remaining: %d",
-                        timestamp,progressPercent, passwordsFound, remainingTasks);
-            }
-        }
+        // Phase 1: Build hash lookup table using executor framework
+        System.out.println("Phase 1: Building hash lookup table...");
+        buildHashLookupTable(allPasswords);
+        
+        // Phase 2: Match user hashes against lookup table
+        System.out.println("\nPhase 2: Matching user passwords...");
+        matchUserPasswords();
+        
         System.out.println("");
-        System.out.println("Total passwords found: " + passwordsFound);
-        System.out.println("Total hashes computed: " + hashesComputed);
+        System.out.println("Total passwords found: " + passwordsFound.get());
+        System.out.println("Total hashes computed: " + hashesComputed.get());
         System.out.println("Total time spent (milliseconds): " + (System.currentTimeMillis() - start));
 
-        if (passwordsFound > 0) {
+        if (passwordsFound.get() > 0) {
             writeCrackedPasswordsToCSV(passwordsPath);
         }
     }
 
+    /**
+     * Builds a hash lookup table using multiple threads via ExecutorService
+     */
+    static void buildHashLookupTable(List<String> allPasswords) throws InterruptedException {
+        int numThreads = Runtime.getRuntime().availableProcessors();
+        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+        
+        // Split dictionary into chunks for parallel processing
+        int chunkSize = Math.max(1, allPasswords.size() / numThreads);
+        List<Future<?>> futures = new ArrayList<>();
+        
+        for (int i = 0; i < allPasswords.size(); i += chunkSize) {
+            int end = Math.min(i + chunkSize, allPasswords.size());
+            List<String> slice = allPasswords.subList(i, end);
+            
+            Future<?> future = executor.submit(
+                new DictionaryHashTask(slice, hashToPlain, hashesComputed)
+            );
+            futures.add(future);
+        }
+        
+        // Wait for all hash computations to complete
+        for (Future<?> future : futures) {
+            try {
+                future.get();
+            } catch (ExecutionException e) {
+                System.err.println("Error computing hashes: " + e.getMessage());
+                e.printStackTrace();
+            }
+        }
+        
+        executor.shutdown();
+        executor.awaitTermination(1, TimeUnit.HOURS);
+        
+        System.out.println("Hashes computed: " + hashesComputed.get());
+    }
+
+    /**
+     * Matches user password hashes against the pre-computed lookup table
+     */
+    static void matchUserPasswords() {
+        int totalUsers = users.size();
+        int processedUsers = 0;
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+        System.out.println("Starting attack with " + totalUsers + " total tasks...");
+        
+        for (User user : users.values()) {
+            String plainPassword = hashToPlain.get(user.hashedPassword);
+            if (plainPassword != null) {
+                user.isFound = true;
+                user.foundPassword = plainPassword;
+                passwordsFound.incrementAndGet();
+            }
+            
+            processedUsers++;
+            if (processedUsers % 1000 == 0 || processedUsers == totalUsers) {
+                double progressPercent = (double) processedUsers / totalUsers * 100;
+                String timestamp = LocalDateTime.now().format(formatter);
+                
+                System.out.printf("\r[%s] %.2f%% complete | Passwords Found: %d | Tasks Remaining: %d",
+                        timestamp, progressPercent, passwordsFound.get(), totalUsers - processedUsers);
+            }
+        }
+        System.out.println(); // New line after progress complete
+    }
 
     /**
      * Writes the successfully cracked user credentials to a CSV file.
-     * @param filePath The path of the CSV file to write to.
      */
     static void writeCrackedPasswordsToCSV(String filePath) {
         File file = new File(filePath);
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
-            // Write the CSV header
             writer.write("user_name,hashed_password,plain_password\n");
 
-            // Iterate through all users and write the details of the cracked ones
             for (User user : users.values()) {
                 if (user.isFound) {
                     String line = String.format("%s,%s,%s\n",
@@ -103,13 +141,7 @@ public class DictionaryAttack {
     }
 
     static List<String> loadDictionary(String filePath) throws IOException {
-        List<String> allWords = new ArrayList<>();
-        try {
-            allWords.addAll(Files.readAllLines(Paths.get(filePath)));
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        return allWords;
+        return Files.readAllLines(Paths.get(filePath));
     }
 
     static void loadUsers(String filename) throws IOException {
@@ -120,47 +152,6 @@ public class DictionaryAttack {
                 String username = parts[0];
                 String hashedPassword = parts[1];
                 users.put(username, new User(username, hashedPassword));
-            }
-        }
-    }
-
-    static String sha256(String input) throws NoSuchAlgorithmException {
-        MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));
-        StringBuilder hex = new StringBuilder();
-        for (byte b : hash) {
-            hex.append(String.format("%02x", b));
-        }
-        return hex.toString();
-    }
-
-    static class CrackTask {
-        String username;
-        String password;
-
-        CrackTask(String username, String password) {
-            this.username = username;
-            this.password = password;
-        }
-
-        public void execute() {
-            User user = users.get(username);
-            if (user == null || user.isFound) return;
-
-            try {
-                String hash = sha256(password);
-                hashesComputed++;
-                reverseLookupCache.put(password, hash);
-
-                if (hash.equals(user.hashedPassword)) {
-                    cracked.add(username + ": " + password);
-                    user.isFound = true;
-                    user.foundPassword = password;
-                    passwordsFound++;
-                }
-
-            } catch (Exception e) {
-                e.printStackTrace();
             }
         }
     }
@@ -177,4 +168,3 @@ public class DictionaryAttack {
         }
     }
 }
-
