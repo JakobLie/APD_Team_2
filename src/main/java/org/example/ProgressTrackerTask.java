@@ -18,15 +18,24 @@ public class ProgressTrackerTask implements Runnable {
     @Override
     public void run() {
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        int lastReported = 0; // Track last checkpoint
 
         while (tasksCompleted.get() < totalUsers) {
-            if (tasksCompleted.get() % 1000 == 0 && tasksCompleted.get() > 0) {
+            int currentTasks = tasksCompleted.get();
+            
+            // Calculate the current checkpoint rounded to lowest thousand (e.g., 1000, 2000, 3000...)
+            int currentCheckpoint = (currentTasks / 1000) * 1000;
+
+            //if (tasksCompleted.get() % 1000 == 0 && tasksCompleted.get() > 0) {
+            if (currentCheckpoint > lastReported && currentCheckpoint > 0) {
                 double progressPercent = (double) tasksCompleted.get() / totalUsers * 100;
                 String timestamp = LocalDateTime.now().format(formatter);
 
                 System.out.printf("\r[%s] %.2f%% complete | Passwords Found: %d | Tasks Remaining: %d",
                         timestamp, progressPercent, passwordsFound.get(), totalUsers - tasksCompleted.get());
                 System.out.flush();
+
+                lastReported = currentCheckpoint;
             }
 
             try {
@@ -35,7 +44,6 @@ public class ProgressTrackerTask implements Runnable {
                 Thread.currentThread().interrupt();
                 break;
             }
-
         }
 
         if (tasksCompleted.get() % 1000 == 0 || tasksCompleted.get() == totalUsers) {
