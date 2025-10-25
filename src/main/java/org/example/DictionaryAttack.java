@@ -5,10 +5,12 @@ import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class DictionaryAttack {
 
-    static HashMap<String, User> users = new HashMap<>();
+    static ConcurrentMap<String, User> users = new ConcurrentHashMap<>();
     static ConcurrentMap<String, String> hashToPlain = new ConcurrentHashMap<>();
     static AtomicInteger passwordsFound = new AtomicInteger(0);
     static AtomicInteger hashesComputed = new AtomicInteger(0);
@@ -71,14 +73,18 @@ public class DictionaryAttack {
         int chunkSize = Math.max(1, allPasswords.size() / numChunks);
         List<Future<?>> futures = new ArrayList<>();
 
+
         for (int i = 0; i < allPasswords.size(); i += chunkSize) {
             int end = Math.min(i + chunkSize, allPasswords.size());
             List<String> slice = allPasswords.subList(i, end);
 
+
             Future<?> future = executor.submit(
+                    new DictionaryHashTask(slice, hashToPlain, hashesComputed));
                     new DictionaryHashTask(slice, hashToPlain, hashesComputed));
             futures.add(future);
         }
+
 
         // Wait for all hash computations to complete
         for (Future<?> future : futures) {
@@ -139,15 +145,20 @@ public class DictionaryAttack {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
             writer.write("user_name,hashed_password,plain_password\n");
 
-            for (User user : users.values()) {
-                if (user.isFound) {
-                    String line = String.format("%s,%s,%s\n",
+            users.values().stream()
+                    .filter(user -> user.isFound)
+                    .map(user -> String.format("%s,%s,%s%n",
                             user.username,
                             user.hashedPassword,
-                            user.foundPassword);
-                    writer.write(line);
-                }
-            }
+                            user.foundPassword))
+                    .forEach(line -> {
+                        try {
+                            writer.write(line);
+                        } catch (IOException e) {
+                            throw new UncheckedIOException(e);
+                        }
+                    });
+
             System.out.println("\nCracked password details have been written to " + filePath);
         } catch (IOException e) {
             System.err.println("Error: Could not write to CSV file: " + e.getMessage());
@@ -155,18 +166,22 @@ public class DictionaryAttack {
     }
 
     static List<String> loadDictionary(String filePath) throws IOException {
-        return Files.readAllLines(Paths.get(filePath));
+        try (Stream<String> stream = Files.lines(Paths.get(filePath))) {
+            return stream.parallel() // use parallel stream
+                    .collect(Collectors.toList());
+        }
     }
 
     static void loadUsers(String filename) throws IOException {
-        List<String> lines = Files.readAllLines(Paths.get(filename));
-        for (String line : lines) {
-            String[] parts = line.split(",");
-            if (parts.length >= 2) {
-                String username = parts[0];
-                String hashedPassword = parts[1];
-                users.put(username, new User(username, hashedPassword));
-            }
+        try (Stream<String> stream = Files.lines(Paths.get(filename))) {
+            stream.parallel().forEach(line -> {
+                String[] parts = line.split(",");
+                if (parts.length >= 2) {
+                    String username = parts[0];
+                    String hashedPassword = parts[1];
+                    users.put(username, new User(username, hashedPassword));
+                }
+            });
         }
     }
 
