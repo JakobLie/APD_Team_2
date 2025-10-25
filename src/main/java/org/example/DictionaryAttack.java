@@ -81,7 +81,6 @@ public class DictionaryAttack {
 
             Future<?> future = executor.submit(
                     new DictionaryHashTask(slice, hashToPlain, hashesComputed));
-                    new DictionaryHashTask(slice, hashToPlain, hashesComputed));
             futures.add(future);
         }
 
