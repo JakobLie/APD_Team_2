@@ -59,7 +59,13 @@ cd /path/to/project
 java -jar target/se301-1.1-SNAPSHOT-jar-with-dependencies.jar \
     datasets/small/in.txt \
     datasets/small/dictionary.txt \
-    datasets/small/out2.txt
+    datasets/small/out_base_code.txt
+```
+
+java -jar target/se301-1.1-SNAPSHOT-jar-with-dependencies.jar \
+    datasets/large/in.txt \
+    datasets/large/dictionary.txt \
+    datasets/large/out_base_code.txt
 ```
 
 ### Example (Windows PowerShell)
@@ -68,7 +74,7 @@ cd C:\path\to\project
 java -jar target\se301-1.1-SNAPSHOT-jar-with-dependencies.jar `
     .\datasets\small\in.txt `
     .\datasets\small\dictionary.txt `
-    .\datasets\small\out2.txt
+    .\datasets\small\out_base_code.txt
 ```
 
 ---

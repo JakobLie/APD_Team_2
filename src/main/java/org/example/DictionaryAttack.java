@@ -11,9 +11,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class DictionaryAttack {
 
     static HashMap<String, User> users = new HashMap<>();
-    static ConcurrentHashMap<String, String> hashToPlain = new ConcurrentHashMap<>();
+    static ConcurrentMap<String, String> hashToPlain = new ConcurrentHashMap<>();
     static AtomicInteger passwordsFound = new AtomicInteger(0);
     static AtomicInteger hashesComputed = new AtomicInteger(0);
+    static AtomicInteger tasksCompleted = new AtomicInteger(0);
 
     public static void main(String[] args) throws Exception {
 
@@ -27,19 +28,32 @@ public class DictionaryAttack {
         String passwordsPath = args[2];
 
         long start = System.currentTimeMillis();
-        
+
         // Load dictionary and users
         List<String> allPasswords = loadDictionary(dictionaryPath);
         loadUsers(usersPath);
 
+        // Phase 0: Init executor framework to be reused across phases
+        int numThreads = Runtime.getRuntime().availableProcessors();
+        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+
         // Phase 1: Build hash lookup table using executor framework
-        System.out.println("Phase 1: Building hash lookup table...");
-        buildHashLookupTable(allPasswords);
-        
-        // Phase 2: Match user hashes against lookup table
-        System.out.println("\nPhase 2: Matching user passwords...");
-        matchUserPasswords();
-        
+        buildHashLookupTable(executor, numThreads, allPasswords);
+
+        // Phase 2: Initiate progress tracker task using separate single thread executor framework
+        ExecutorService progressExecutor = Executors.newSingleThreadExecutor();
+        startProgressTracker(progressExecutor);
+
+        // Phase 3: Match user hashes against lookup table using executor framework
+        matchUserPasswords(executor, numThreads);
+
+        // Clean up executor services
+        progressExecutor.shutdown();
+        progressExecutor.awaitTermination(10, TimeUnit.MINUTES);
+
+        executor.shutdown();
+        executor.awaitTermination(1, TimeUnit.HOURS);
+
         System.out.println("");
         System.out.println("Total passwords found: " + passwordsFound.get());
         System.out.println("Total hashes computed: " + hashesComputed.get());
@@ -53,24 +67,21 @@ public class DictionaryAttack {
     /**
      * Builds a hash lookup table using multiple threads via ExecutorService
      */
-    static void buildHashLookupTable(List<String> allPasswords) throws InterruptedException {
-        int numThreads = Runtime.getRuntime().availableProcessors();
-        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-        
+    static void buildHashLookupTable(ExecutorService executor, int numChunks, List<String> allPasswords)
+            throws InterruptedException {
         // Split dictionary into chunks for parallel processing
-        int chunkSize = Math.max(1, allPasswords.size() / numThreads);
+        int chunkSize = Math.max(1, allPasswords.size() / numChunks);
         List<Future<?>> futures = new ArrayList<>();
-        
+
         for (int i = 0; i < allPasswords.size(); i += chunkSize) {
             int end = Math.min(i + chunkSize, allPasswords.size());
             List<String> slice = allPasswords.subList(i, end);
-            
+
             Future<?> future = executor.submit(
-                new DictionaryHashTask(slice, hashToPlain, hashesComputed)
-            );
+                    new DictionaryHashTask(slice, hashToPlain, hashesComputed));
             futures.add(future);
         }
-        
+
         // Wait for all hash computations to complete
         for (Future<?> future : futures) {
             try {
@@ -80,41 +91,46 @@ public class DictionaryAttack {
                 e.printStackTrace();
             }
         }
-        
-        executor.shutdown();
-        executor.awaitTermination(1, TimeUnit.HOURS);
-        
-        System.out.println("Hashes computed: " + hashesComputed.get());
+    }
+
+    /**
+     * Displays progress of dictionary attack for every 1000 tasks
+     */
+    static void startProgressTracker(ExecutorService executor) throws InterruptedException {
+        executor.submit(new ProgressTrackerTask(users.size(), passwordsFound, tasksCompleted));
     }
 
     /**
      * Matches user password hashes against the pre-computed lookup table
      */
-    static void matchUserPasswords() {
-        int totalUsers = users.size();
-        int processedUsers = 0;
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    static void matchUserPasswords(ExecutorService executor, int numChunks) throws InterruptedException {
+        System.out.println("Starting attack with " + users.size() + " total tasks...");
 
-        System.out.println("Starting attack with " + totalUsers + " total tasks...");
-        
-        for (User user : users.values()) {
-            String plainPassword = hashToPlain.get(user.hashedPassword);
-            if (plainPassword != null) {
-                user.isFound = true;
-                user.foundPassword = plainPassword;
-                passwordsFound.incrementAndGet();
-            }
-            
-            processedUsers++;
-            if (processedUsers % 1000 == 0 || processedUsers == totalUsers) {
-                double progressPercent = (double) processedUsers / totalUsers * 100;
-                String timestamp = LocalDateTime.now().format(formatter);
-                
-                System.out.printf("\r[%s] %.2f%% complete | Passwords Found: %d | Tasks Remaining: %d",
-                        timestamp, progressPercent, passwordsFound.get(), totalUsers - processedUsers);
+        // Convert HashMap to ArrayList to allow for splitting into chunks
+        List<User> usersList = new ArrayList<>(users.values());
+
+        // Split list of users into chunks for parallel processing
+        int chunkSize = Math.max(1, usersList.size() / numChunks);
+        List<Future<?>> futures = new ArrayList<>();
+
+        for (int i = 0; i < users.size(); i += chunkSize) {
+            int end = Math.min(i + chunkSize, usersList.size());
+            List<User> slice = usersList.subList(i, end);
+
+            Future<?> future = executor.submit(
+                    new UserLookupTask(slice, hashToPlain, passwordsFound, tasksCompleted));
+            futures.add(future);
+        }
+
+        // Wait for all user lookups to complete
+        for (Future<?> future : futures) {
+            try {
+                future.get();
+            } catch (ExecutionException e) {
+                System.err.println("Error looking up user: " + e.getMessage());
+                e.printStackTrace();
             }
         }
-        System.out.println(); // New line after progress complete
     }
 
     /**
@@ -159,8 +175,8 @@ public class DictionaryAttack {
     static class User {
         String username;
         String hashedPassword;
-        boolean isFound = false;
-        String foundPassword = null;
+        volatile boolean isFound = false;
+        volatile String foundPassword = null;
 
         public User(String username, String hashedPassword) {
             this.username = username;

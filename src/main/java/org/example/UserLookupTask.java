@@ -5,49 +5,33 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class UserLookupTask implements Runnable {
-    private final List<User> userSlice;
+    private final List<DictionaryAttack.User> userSlice;
     private final ConcurrentMap<String, String> hashToPlain;
-    private final AtomicInteger passwordsFound;
+    private AtomicInteger passwordsFound;
+    private AtomicInteger tasksCompleted;
 
-    public UserLookupTask(List<User> userSlice,
+    public UserLookupTask(List<DictionaryAttack.User> userSlice,
             ConcurrentMap<String, String> hashToPlain,
-            AtomicInteger passwordsFound) {
+            AtomicInteger passwordsFound,
+            AtomicInteger tasksCompleted) {
         this.userSlice = userSlice;
         this.hashToPlain = hashToPlain;
         this.passwordsFound = passwordsFound;
+        this.tasksCompleted = tasksCompleted;
     }
 
     @Override
     public void run() {
-        for (User user : userSlice) {
-            if (user == null || user.isFound)
-                continue;
+        for (DictionaryAttack.User user : userSlice) {
+            String plainPassword = hashToPlain.get(user.hashedPassword);
 
-            // Look up user's hash in the dictionary
-            String foundPassword = hashToPlain.get(user.hashedPassword);
-
-            if (foundPassword != null) {
-                synchronized (user) {
-                    if (!user.isFound) { // Double-check
-                        user.foundPassword = foundPassword;
-                        user.isFound = true;
-                        passwordsFound.incrementAndGet();
-                    }
-                }
+            if (plainPassword != null) {
+                user.isFound = true;
+                user.foundPassword = plainPassword;
+                passwordsFound.incrementAndGet();
             }
-        }
-    }
 
-    // Inner class to hold user data
-    static class User {
-        String username;
-        String hashedPassword;
-        volatile boolean isFound = false;
-        String foundPassword = null;
-
-        public User(String username, String hashedPassword) {
-            this.username = username;
-            this.hashedPassword = hashedPassword;
+            tasksCompleted.incrementAndGet();
         }
     }
 }
