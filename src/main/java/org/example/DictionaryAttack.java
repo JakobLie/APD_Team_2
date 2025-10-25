@@ -7,11 +7,13 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class DictionaryAttack {
 
-    static HashMap<String, User> users = new HashMap<>();
-    static ConcurrentHashMap<String, String> hashToPlain = new ConcurrentHashMap<>();
+    static ConcurrentMap<String, User> users = new ConcurrentHashMap<>();
+    static ConcurrentMap<String, String> hashToPlain = new ConcurrentHashMap<>();
     static AtomicInteger passwordsFound = new AtomicInteger(0);
     static AtomicInteger hashesComputed = new AtomicInteger(0);
 
@@ -27,7 +29,7 @@ public class DictionaryAttack {
         String passwordsPath = args[2];
 
         long start = System.currentTimeMillis();
-        
+
         // Load dictionary and users
         List<String> allPasswords = loadDictionary(dictionaryPath);
         loadUsers(usersPath);
@@ -35,11 +37,11 @@ public class DictionaryAttack {
         // Phase 1: Build hash lookup table using executor framework
         System.out.println("Phase 1: Building hash lookup table...");
         buildHashLookupTable(allPasswords);
-        
+
         // Phase 2: Match user hashes against lookup table
         System.out.println("\nPhase 2: Matching user passwords...");
         matchUserPasswords();
-        
+
         System.out.println("");
         System.out.println("Total passwords found: " + passwordsFound.get());
         System.out.println("Total hashes computed: " + hashesComputed.get());
@@ -56,21 +58,20 @@ public class DictionaryAttack {
     static void buildHashLookupTable(List<String> allPasswords) throws InterruptedException {
         int numThreads = Runtime.getRuntime().availableProcessors();
         ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-        
+
         // Split dictionary into chunks for parallel processing
         int chunkSize = Math.max(1, allPasswords.size() / numThreads);
         List<Future<?>> futures = new ArrayList<>();
-        
+
         for (int i = 0; i < allPasswords.size(); i += chunkSize) {
             int end = Math.min(i + chunkSize, allPasswords.size());
             List<String> slice = allPasswords.subList(i, end);
-            
+
             Future<?> future = executor.submit(
-                new DictionaryHashTask(slice, hashToPlain, hashesComputed)
-            );
+                    new DictionaryHashTask(slice, hashToPlain, hashesComputed));
             futures.add(future);
         }
-        
+
         // Wait for all hash computations to complete
         for (Future<?> future : futures) {
             try {
@@ -80,10 +81,10 @@ public class DictionaryAttack {
                 e.printStackTrace();
             }
         }
-        
+
         executor.shutdown();
         executor.awaitTermination(1, TimeUnit.HOURS);
-        
+
         System.out.println("Hashes computed: " + hashesComputed.get());
     }
 
@@ -96,7 +97,7 @@ public class DictionaryAttack {
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
         System.out.println("Starting attack with " + totalUsers + " total tasks...");
-        
+
         for (User user : users.values()) {
             String plainPassword = hashToPlain.get(user.hashedPassword);
             if (plainPassword != null) {
@@ -104,12 +105,12 @@ public class DictionaryAttack {
                 user.foundPassword = plainPassword;
                 passwordsFound.incrementAndGet();
             }
-            
+
             processedUsers++;
             if (processedUsers % 1000 == 0 || processedUsers == totalUsers) {
                 double progressPercent = (double) processedUsers / totalUsers * 100;
                 String timestamp = LocalDateTime.now().format(formatter);
-                
+
                 System.out.printf("\r[%s] %.2f%% complete | Passwords Found: %d | Tasks Remaining: %d",
                         timestamp, progressPercent, passwordsFound.get(), totalUsers - processedUsers);
             }
@@ -125,15 +126,20 @@ public class DictionaryAttack {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
             writer.write("user_name,hashed_password,plain_password\n");
 
-            for (User user : users.values()) {
-                if (user.isFound) {
-                    String line = String.format("%s,%s,%s\n",
+            users.values().stream()
+                    .filter(user -> user.isFound)
+                    .map(user -> String.format("%s,%s,%s%n",
                             user.username,
                             user.hashedPassword,
-                            user.foundPassword);
-                    writer.write(line);
-                }
-            }
+                            user.foundPassword))
+                    .forEach(line -> {
+                        try {
+                            writer.write(line);
+                        } catch (IOException e) {
+                            throw new UncheckedIOException(e);
+                        }
+                    });
+
             System.out.println("\nCracked password details have been written to " + filePath);
         } catch (IOException e) {
             System.err.println("Error: Could not write to CSV file: " + e.getMessage());
@@ -141,18 +147,22 @@ public class DictionaryAttack {
     }
 
     static List<String> loadDictionary(String filePath) throws IOException {
-        return Files.readAllLines(Paths.get(filePath));
+        try (Stream<String> stream = Files.lines(Paths.get(filePath))) {
+            return stream.parallel() // use parallel stream
+                    .collect(Collectors.toList());
+        }
     }
 
     static void loadUsers(String filename) throws IOException {
-        List<String> lines = Files.readAllLines(Paths.get(filename));
-        for (String line : lines) {
-            String[] parts = line.split(",");
-            if (parts.length >= 2) {
-                String username = parts[0];
-                String hashedPassword = parts[1];
-                users.put(username, new User(username, hashedPassword));
-            }
+        try (Stream<String> stream = Files.lines(Paths.get(filename))) {
+            stream.parallel().forEach(line -> {
+                String[] parts = line.split(",");
+                if (parts.length >= 2) {
+                    String username = parts[0];
+                    String hashedPassword = parts[1];
+                    users.put(username, new User(username, hashedPassword));
+                }
+            });
         }
     }
 
