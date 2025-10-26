@@ -38,6 +38,11 @@ public class DictionaryAttack {
         ExecutorService executor = Executors.newFixedThreadPool(numThreads);
 
         // Phase 1: Build hash lookup table using executor framework
+
+        // Pre-allocate concurrent hash map capacity to prevent resizing
+        int estimatedSize = (int) (allPasswords.size() / 0.75f) + 1;
+        hashToPlain = new ConcurrentHashMap<>(estimatedSize);
+
         buildHashLookupTable(executor, numThreads, allPasswords);
 
         // Phase 2: Initiate progress tracker task using separate single thread executor framework
