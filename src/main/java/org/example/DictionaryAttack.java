@@ -1,6 +1,7 @@
 package org.example;
 
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.*;
@@ -42,7 +43,6 @@ public class DictionaryAttack {
         // Pre-allocate concurrent hash map capacity to prevent resizing
         int estimatedSize = (int) (allPasswords.size() / 0.75f) + 1;
         hashToPlain = new ConcurrentHashMap<>(estimatedSize);
-
         buildHashLookupTable(executor, numThreads, allPasswords);
 
         // Phase 2: Initiate progress tracker task using separate single thread executor framework
@@ -169,23 +169,50 @@ public class DictionaryAttack {
         }
     }
 
+    // Using Streams
+    // static List<String> loadDictionary(String filePath) throws IOException {
+    //     try (Stream<String> stream = Files.lines(Paths.get(filePath))) {
+    //         return stream.parallel() // use parallel stream
+    //                 .collect(Collectors.toList());
+    //     }
+    // }
+
+    // static void loadUsers(String filename) throws IOException {
+    //     try (Stream<String> stream = Files.lines(Paths.get(filename))) {
+    //         stream.parallel().forEach(line -> {
+    //             String[] parts = line.split(",");
+    //             if (parts.length >= 2) {
+    //                 String username = parts[0];
+    //                 String hashedPassword = parts[1];
+    //                 users.put(username, new User(username, hashedPassword));
+    //             }
+    //         });
+    //     }
+    // }
+
+    // using BufferedReader
     static List<String> loadDictionary(String filePath) throws IOException {
-        try (Stream<String> stream = Files.lines(Paths.get(filePath))) {
-            return stream.parallel() // use parallel stream
-                    .collect(Collectors.toList());
+        List<String> passwords = new ArrayList<>();
+        try (BufferedReader reader = new BufferedReader(
+                new FileReader(filePath, StandardCharsets.UTF_8), 8192)) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                passwords.add(line);
+            }
         }
+        return passwords;
     }
 
     static void loadUsers(String filename) throws IOException {
-        try (Stream<String> stream = Files.lines(Paths.get(filename))) {
-            stream.parallel().forEach(line -> {
-                String[] parts = line.split(",");
+        try (BufferedReader reader = new BufferedReader(
+                new FileReader(filename, StandardCharsets.UTF_8), 8192)) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                String[] parts = line.split(",", 2); // Limit split to 2 parts
                 if (parts.length >= 2) {
-                    String username = parts[0];
-                    String hashedPassword = parts[1];
-                    users.put(username, new User(username, hashedPassword));
+                    users.put(parts[0], new User(parts[0], parts[1]));
                 }
-            });
+            }
         }
     }
 

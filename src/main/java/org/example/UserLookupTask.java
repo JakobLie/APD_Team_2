@@ -31,13 +31,6 @@ public class UserLookupTask implements Runnable {
                 passwordsFound.incrementAndGet();
             }
 
-            // Added to test runtime
-            try {
-                Thread.sleep(3);
-            } catch (Exception e) {
-                // TODO: handle exception
-            }
-
             tasksCompleted.incrementAndGet();
         }
     }
