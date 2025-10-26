@@ -116,7 +116,7 @@ public class DictionaryAttack {
         int chunkSize = Math.max(1, usersList.size() / numChunks);
         List<Future<?>> futures = new ArrayList<>();
 
-        for (int i = 0; i < users.size(); i += chunkSize) {
+        for (int i = 0; i < usersList.size(); i += chunkSize) {
             int end = Math.min(i + chunkSize, usersList.size());
             List<User> slice = usersList.subList(i, end);
 
