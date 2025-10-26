@@ -47,14 +47,16 @@ public class DictionaryHashTask implements Runnable {
     //     return sb.toString();
     // }
 
+    // set as static attribute to avoid creating every call
+    private static final char[] HEX_ARRAY = "0123456789abcdef".toCharArray();
+
     private static String toHex(byte[] bytes) {
         char[] hexChars = new char[bytes.length * 2];
-        char[] hexArray = "0123456789abcdef".toCharArray();
         
         for (int i = 0; i < bytes.length; i++) {
             int v = bytes[i] & 0xFF;
-            hexChars[i * 2] = hexArray[v >>> 4];
-            hexChars[i * 2 + 1] = hexArray[v & 0x0F];
+            hexChars[i * 2] = HEX_ARRAY[v >>> 4];
+            hexChars[i * 2 + 1] = HEX_ARRAY[v & 0x0F];
         }
         return new String(hexChars);
     }
