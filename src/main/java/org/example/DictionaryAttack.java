@@ -11,7 +11,7 @@ import java.util.stream.Stream;
 
 public class DictionaryAttack {
 
-    static ConcurrentMap<String, User> users = new ConcurrentHashMap<>();
+    static List<User> users = new ArrayList<>();
     static ConcurrentMap<String, String> hashToPlain = new ConcurrentHashMap<>();
     static AtomicInteger passwordsFound = new AtomicInteger(0);
     static AtomicInteger hashesComputed = new AtomicInteger(0);
@@ -114,16 +114,13 @@ public class DictionaryAttack {
     static void matchUserPasswords(ExecutorService executor, int numChunks) throws InterruptedException {
         System.out.println("Starting attack with " + users.size() + " total tasks...");
 
-        // Convert HashMap to ArrayList to allow for splitting into chunks
-        List<User> usersList = new ArrayList<>(users.values());
-
         // Split list of users into chunks for parallel processing
-        int chunkSize = Math.max(1, usersList.size() / numChunks);
+        int chunkSize = Math.max(1, users.size() / numChunks);
         List<Future<?>> futures = new ArrayList<>();
 
-        for (int i = 0; i < usersList.size(); i += chunkSize) {
-            int end = Math.min(i + chunkSize, usersList.size());
-            List<User> slice = usersList.subList(i, end);
+        for (int i = 0; i < users.size(); i += chunkSize) {
+            int end = Math.min(i + chunkSize, users.size());
+            List<User> slice = users.subList(i, end);
 
             Future<?> future = executor.submit(
                     new UserLookupTask(slice, hashToPlain, passwordsFound, tasksCompleted));
@@ -149,7 +146,7 @@ public class DictionaryAttack {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
             writer.write("user_name,hashed_password,plain_password\n");
 
-            users.values().stream()
+            users.stream()
                     .filter(user -> user.isFound)
                     .map(user -> String.format("%s,%s,%s%n",
                             user.username,
@@ -210,7 +207,7 @@ public class DictionaryAttack {
             while ((line = reader.readLine()) != null) {
                 String[] parts = line.split(",", 2); // Limit split to 2 parts
                 if (parts.length >= 2) {
-                    users.put(parts[0], new User(parts[0], parts[1]));
+                    users.add(new User(parts[0], parts[1]));
                 }
             }
         }
