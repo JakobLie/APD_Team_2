@@ -166,7 +166,7 @@ public class DictionaryAttack {
         }
     }
 
-    // Using Streams
+    // Load passwords & load users using Streams
     // static List<String> loadDictionary(String filePath) throws IOException {
     //     try (Stream<String> stream = Files.lines(Paths.get(filePath))) {
     //         return stream.parallel() // use parallel stream
@@ -187,7 +187,7 @@ public class DictionaryAttack {
     //     }
     // }
 
-    // using BufferedReader
+    // Load passwords & load users using BufferedReader
     static List<String> loadDictionary(String filePath) throws IOException {
         List<String> passwords = new ArrayList<>();
         try (BufferedReader reader = new BufferedReader(
