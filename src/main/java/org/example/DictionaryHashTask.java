@@ -3,7 +3,9 @@ package org.example;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -12,6 +14,15 @@ public class DictionaryHashTask implements Runnable {
     private final List<String> slice;
     private final ConcurrentMap<String, String> hashToPlain;
     private AtomicInteger hashesComputed;
+
+    // ThreadLocal MessageDigest so each thread reuses a single SHA-256 instance
+    private static final ThreadLocal<MessageDigest> THREAD_DIGEST = ThreadLocal.withInitial(() -> {
+        try {
+            return MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("SHA-256 unavailable", e);
+        }
+    });
 
     public DictionaryHashTask(List<String> slice,
             ConcurrentMap<String, String> hashToPlain,
@@ -23,29 +34,23 @@ public class DictionaryHashTask implements Runnable {
 
     @Override
     public void run() {
-        final MessageDigest digest;
-        try {
-            digest = MessageDigest.getInstance("SHA-256");
-        } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException("SHA-256 unavailable", e);
-        }
+        // Get the per-thread MessageDigest
+        final MessageDigest digest = THREAD_DIGEST.get();
+        Map<String, String> localMap = new HashMap<>((int) (slice.size() / 0.75f) + 1);
 
         for (String plain : slice) {
             if (plain == null)
                 continue;
+
+            // reset before use to be safe
+            digest.reset();
             byte[] hash = digest.digest(plain.getBytes(StandardCharsets.UTF_8));
             String hex = toHex(hash);
-            hashToPlain.putIfAbsent(hex, plain);
+            localMap.putIfAbsent(hex, plain);
             hashesComputed.getAndIncrement();
         }
+        hashToPlain.putAll(localMap);
     }
-
-    // private static String toHex(byte[] bytes) {
-    //     StringBuilder sb = new StringBuilder(bytes.length * 2);
-    //     for (byte b : bytes)
-    //         sb.append(String.format("%02x", b));
-    //     return sb.toString();
-    // }
 
     // set as static attribute to avoid creating every call
     private static final char[] HEX_ARRAY = "0123456789abcdef".toCharArray();
