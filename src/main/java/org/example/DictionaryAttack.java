@@ -2,12 +2,9 @@ package org.example;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 public class DictionaryAttack {
 
@@ -18,55 +15,87 @@ public class DictionaryAttack {
     static AtomicInteger tasksCompleted = new AtomicInteger(0);
 
     public static void main(String[] args) throws Exception {
+        if (args.length >= 4 && args[0].equals("--bench")) {
+            System.out.println(args);
+            int iterations = Integer.parseInt(args[1]);
+            String usersPath = args[2];
+            String dictPath = args[3];
+            String outPath = args.length > 4 ? args[4] : "out.txt";
 
-        if (args.length < 3) {
-            System.out.println("Usage: java -jar <jar-file-name>.jar <input_file> <dictionary_file> <output_file>");
-            System.exit(1);
+            // Warm-up: run a few times to let JIT compile hot methods
+            for (int i = 0; i < 5; i++) {
+                runOnce(usersPath, dictPath, outPath, false);
+            }
+
+            long[] times = new long[iterations];
+            for (int i = 0; i < iterations; i++) {
+                times[i] = runOnce(usersPath, dictPath, outPath, i == iterations - 1); // write output only on last
+                                                                                       // iteration
+            }
+
+            // Compute median
+            Arrays.sort(times);
+            long median = times[times.length / 2];
+            System.out.println("");
+            System.out.println("Total passwords found: " + passwordsFound.get());
+            System.out.println("Total hashes computed: " + hashesComputed.get());
+            System.out.println("Median time (ms): " + median);
+            return;
         }
 
-        String usersPath = args[0];
-        String dictionaryPath = args[1];
-        String passwordsPath = args[2];
+        // Existing normal main() logic
+        if (args.length < 3) {
+            System.out.println("Usage: java -jar ... <users> <dict> <output>");
+            System.exit(1);
+        } else {
+            long time = runOnce(args[0], args[1], args[2], true); // your current main logic
+            System.out.println("");
+            System.out.println("Total passwords found: " + passwordsFound.get());
+            System.out.println("Total hashes computed: " + hashesComputed.get());
+            System.out.println("Total time spent (milliseconds): " + time);
+        }
+    }
+
+    // inside DictionaryAttack.java
+    public static long runOnce(String usersPath, String dictPath, String outputPath, boolean writeOutput)
+            throws Exception {
+        // Reset global state before each run
+        users.clear();
+        hashToPlain.clear();
+        passwordsFound.set(0);
+        hashesComputed.set(0);
+        tasksCompleted.set(0);
 
         long start = System.currentTimeMillis();
 
         // Load dictionary and users
-        List<String> allPasswords = loadDictionary(dictionaryPath);
+        List<String> allPasswords = loadDictionary(dictPath);
         loadUsers(usersPath);
 
-        // Phase 0: Init executor framework to be reused across phases
         int numThreads = Runtime.getRuntime().availableProcessors();
         ExecutorService executor = Executors.newFixedThreadPool(numThreads);
 
-        // Phase 1: Build hash lookup table using executor framework
-
-        // Pre-allocate concurrent hash map capacity to prevent resizing
+        // Build hash table and match users
         int estimatedSize = (int) (allPasswords.size() / 0.75f) + 1;
         hashToPlain = new ConcurrentHashMap<>(estimatedSize);
-        buildHashLookupTable(executor, numThreads*16, allPasswords);
+        buildHashLookupTable(executor, numThreads, allPasswords);
 
-        // Phase 2: Initiate progress tracker task using separate single thread executor framework
         ExecutorService progressExecutor = Executors.newSingleThreadExecutor();
         startProgressTracker(progressExecutor);
+        matchUserPasswords(executor, numThreads);
 
-        // Phase 3: Match user hashes against lookup table using executor framework
-        matchUserPasswords(executor, numThreads*16);
-
-        // Clean up executor services
         progressExecutor.shutdown();
         progressExecutor.awaitTermination(10, TimeUnit.MINUTES);
-
         executor.shutdown();
         executor.awaitTermination(1, TimeUnit.HOURS);
 
-        System.out.println("");
-        System.out.println("Total passwords found: " + passwordsFound.get());
-        System.out.println("Total hashes computed: " + hashesComputed.get());
-        System.out.println("Total time spent (milliseconds): " + (System.currentTimeMillis() - start));
+        long time = System.currentTimeMillis() - start;
 
-        if (passwordsFound.get() > 0) {
-            writeCrackedPasswordsToCSV(passwordsPath);
+        if (writeOutput) {
+            writeCrackedPasswordsToCSV(outputPath);
         }
+
+        return time;
     }
 
     /**
@@ -78,17 +107,14 @@ public class DictionaryAttack {
         int chunkSize = Math.max(1, allPasswords.size() / numChunks);
         List<Future<?>> futures = new ArrayList<>();
 
-
         for (int i = 0; i < allPasswords.size(); i += chunkSize) {
             int end = Math.min(i + chunkSize, allPasswords.size());
             List<String> slice = allPasswords.subList(i, end);
-
 
             Future<?> future = executor.submit(
                     new DictionaryHashTask(slice, hashToPlain, hashesComputed));
             futures.add(future);
         }
-
 
         // Wait for all hash computations to complete
         for (Future<?> future : futures) {
@@ -112,7 +138,7 @@ public class DictionaryAttack {
      * Matches user password hashes against the pre-computed lookup table
      */
     static void matchUserPasswords(ExecutorService executor, int numChunks) throws InterruptedException {
-        System.out.println("Starting attack with " + users.size() + " total tasks...");
+        // System.out.println("Starting attack with " + users.size() + " total tasks...");
 
         // Split list of users into chunks for parallel processing
         int chunkSize = Math.max(1, users.size() / numChunks);
@@ -168,23 +194,23 @@ public class DictionaryAttack {
 
     // Load passwords & load users using Streams
     // static List<String> loadDictionary(String filePath) throws IOException {
-    //     try (Stream<String> stream = Files.lines(Paths.get(filePath))) {
-    //         return stream.parallel() // use parallel stream
-    //                 .collect(Collectors.toList());
-    //     }
+    // try (Stream<String> stream = Files.lines(Paths.get(filePath))) {
+    // return stream.parallel() // use parallel stream
+    // .collect(Collectors.toList());
+    // }
     // }
 
     // static void loadUsers(String filename) throws IOException {
-    //     try (Stream<String> stream = Files.lines(Paths.get(filename))) {
-    //         stream.parallel().forEach(line -> {
-    //             String[] parts = line.split(",");
-    //             if (parts.length >= 2) {
-    //                 String username = parts[0];
-    //                 String hashedPassword = parts[1];
-    //                 users.put(username, new User(username, hashedPassword));
-    //             }
-    //         });
-    //     }
+    // try (Stream<String> stream = Files.lines(Paths.get(filename))) {
+    // stream.parallel().forEach(line -> {
+    // String[] parts = line.split(",");
+    // if (parts.length >= 2) {
+    // String username = parts[0];
+    // String hashedPassword = parts[1];
+    // users.put(username, new User(username, hashedPassword));
+    // }
+    // });
+    // }
     // }
 
     // Load passwords & load users using BufferedReader
