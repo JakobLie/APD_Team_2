@@ -16,7 +16,6 @@ public class DictionaryAttack {
 
     public static void main(String[] args) throws Exception {
         if (args.length >= 4 && args[0].equals("--bench")) {
-            System.out.println(args);
             int iterations = Integer.parseInt(args[1]);
             String usersPath = args[2];
             String dictPath = args[3];
