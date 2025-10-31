@@ -83,10 +83,10 @@ public class DictionaryAttack {
         startProgressTracker(progressExecutor);
         matchUserPasswords(executor, numThreads);
 
-        progressExecutor.shutdown();
-        progressExecutor.awaitTermination(10, TimeUnit.MINUTES);
         executor.shutdown();
         executor.awaitTermination(1, TimeUnit.HOURS);
+        progressExecutor.shutdown();
+        progressExecutor.awaitTermination(10, TimeUnit.MINUTES);
 
         long time = System.currentTimeMillis() - start;
 
