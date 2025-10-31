@@ -9,7 +9,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
-// I worry if we have enough memory on jvm to do this
 public class DictionaryHashTask implements Runnable {
     private final List<String> slice;
     private final ConcurrentMap<String, String> hashToPlain;

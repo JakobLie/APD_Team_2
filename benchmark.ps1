@@ -12,6 +12,7 @@ if ($LASTEXITCODE -ne 0) {
     Write-Host "Maven build failed." 
     exit 1 
 } 
+Write-Host "Build complete."
 
 # Only a single JVM invocation
 Write-Host "Running benchmark (30 iterations) in a single JVM..."

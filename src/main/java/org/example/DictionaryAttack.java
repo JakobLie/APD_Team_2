@@ -47,7 +47,7 @@ public class DictionaryAttack {
             System.out.println("Usage: java -jar ... <users> <dict> <output>");
             System.exit(1);
         } else {
-            long time = runOnce(args[0], args[1], args[2], true); // your current main logic
+            long time = runOnce(args[0], args[1], args[2], true);
             System.out.println("");
             System.out.println("Total passwords found: " + passwordsFound.get());
             System.out.println("Total hashes computed: " + hashesComputed.get());
