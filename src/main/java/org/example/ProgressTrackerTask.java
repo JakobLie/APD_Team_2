@@ -39,20 +39,13 @@ public class ProgressTrackerTask implements Runnable {
 
                 lastReported = currentCheckpoint;
             }
-
-            try {
-                Thread.sleep(100);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
-            }
         }
 
         int finalTasks = tasksCompleted.get();
         double progressPercent = (double) finalTasks / totalUsers * 100;
         String timestamp = LocalDateTime.now().format(formatter);
 
-        System.out.printf("\r[%s] %.2f%% complete | Passwords Found: %d | Tasks Remaining: %d",
+        System.out.printf("\r[%s] %.2f%% complete | Passwords Found: %d | Tasks Remaining: %d  ", // 2 spaces necessary to avoid carriage return race condition
                 timestamp, progressPercent, passwordsFound.get(), totalUsers - finalTasks);
         System.out.flush();
     }
