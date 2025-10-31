@@ -20,19 +20,21 @@ public class ProgressTrackerTask implements Runnable {
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         int lastReported = 0; // Track last checkpoint
 
-        while (tasksCompleted.get() < totalUsers) {
-            int currentTasks = tasksCompleted.get();
+        while (true) {
+            int currentTasks = tasksCompleted.get();  // Read once per iteration
             
-            // Calculate the current checkpoint rounded to lowest thousand (e.g., 1000, 2000, 3000...)
+            if (currentTasks >= totalUsers) { // Each user is 1 task
+                break;  // Exit before checkpoint calculation
+            }
+            
             int currentCheckpoint = (currentTasks / 1000) * 1000;
 
-            //if (tasksCompleted.get() % 1000 == 0 && tasksCompleted.get() > 0) {
             if (currentCheckpoint > lastReported && currentCheckpoint > 0) {
-                double progressPercent = (double) tasksCompleted.get() / totalUsers * 100;
+                double progressPercent = (double) currentTasks / totalUsers * 100;
                 String timestamp = LocalDateTime.now().format(formatter);
 
                 System.out.printf("\r[%s] %.2f%% complete | Passwords Found: %d | Tasks Remaining: %d",
-                        timestamp, progressPercent, passwordsFound.get(), totalUsers - tasksCompleted.get());
+                        timestamp, progressPercent, passwordsFound.get(), totalUsers - currentTasks);
                 System.out.flush();
 
                 lastReported = currentCheckpoint;
@@ -46,12 +48,12 @@ public class ProgressTrackerTask implements Runnable {
             }
         }
 
-        if (tasksCompleted.get() % 1000 == 0 || tasksCompleted.get() == totalUsers) {
-            double progressPercent = (double) tasksCompleted.get() / totalUsers * 100;
-            String timestamp = LocalDateTime.now().format(formatter);
+        int finalTasks = tasksCompleted.get();
+        double progressPercent = (double) finalTasks / totalUsers * 100;
+        String timestamp = LocalDateTime.now().format(formatter);
 
-            System.out.printf("\r[%s] %.2f%% complete | Passwords Found: %d | Tasks Remaining: %d",
-                    timestamp, progressPercent, passwordsFound.get(), totalUsers - tasksCompleted.get());
-        }
+        System.out.printf("\r[%s] %.2f%% complete | Passwords Found: %d | Tasks Remaining: %d",
+                timestamp, progressPercent, passwordsFound.get(), totalUsers - finalTasks);
+        System.out.flush();
     }
 }
