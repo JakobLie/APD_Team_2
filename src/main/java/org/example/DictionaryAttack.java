@@ -2,6 +2,8 @@ package org.example;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -15,56 +17,20 @@ public class DictionaryAttack {
     static AtomicInteger tasksCompleted = new AtomicInteger(0);
 
     public static void main(String[] args) throws Exception {
-        if (args.length >= 4 && args[0].equals("--bench")) {
-            int iterations = Integer.parseInt(args[1]);
-            String usersPath = args[2];
-            String dictPath = args[3];
-            String outPath = args.length > 4 ? args[4] : "out.txt";
-
-            // Warm-up: run a few times to let JIT compile hot methods
-            for (int i = 0; i < 5; i++) {
-                runOnce(usersPath, dictPath, outPath, false);
-            }
-
-            long[] times = new long[iterations];
-            for (int i = 0; i < iterations; i++) {
-                times[i] = runOnce(usersPath, dictPath, outPath, i == iterations - 1); // write output only on last
-                                                                                       // iteration
-            }
-
-            // Compute median
-            Arrays.sort(times);
-            long median = times[times.length / 2];
-            System.out.println("");
-            System.out.println("Total passwords found: " + passwordsFound.get());
-            System.out.println("Total hashes computed: " + hashesComputed.get());
-            System.out.println("Median time (ms): " + median);
-            return;
-        }
-
-        // Existing normal main() logic
         if (args.length < 3) {
             System.out.println("Usage: java -jar ... <users> <dict> <output>");
             System.exit(1);
-        } else {
-            long time = runOnce(args[0], args[1], args[2], true);
-            System.out.println("");
-            System.out.println("Total passwords found: " + passwordsFound.get());
-            System.out.println("Total hashes computed: " + hashesComputed.get());
-            System.out.println("Total time spent (milliseconds): " + time);
         }
+
+        long time = runOnce(args[0], args[1], args[2]);
+        System.out.println("");
+        System.out.println("Total passwords found: " + passwordsFound.get());
+        System.out.println("Total hashes computed: " + hashesComputed.get());
+        System.out.println("Total time spent (milliseconds): " + time);
     }
 
-    // inside DictionaryAttack.java
-    public static long runOnce(String usersPath, String dictPath, String outputPath, boolean writeOutput)
+    public static long runOnce(String usersPath, String dictPath, String outputPath)
             throws Exception {
-        // Reset global state before each run
-        users.clear();
-        hashToPlain.clear();
-        passwordsFound.set(0);
-        hashesComputed.set(0);
-        tasksCompleted.set(0);
-
         long start = System.currentTimeMillis();
 
         // Load dictionary and users
@@ -90,9 +56,7 @@ public class DictionaryAttack {
 
         long time = System.currentTimeMillis() - start;
 
-        if (writeOutput) {
-            writeCrackedPasswordsToCSV(outputPath);
-        }
+        writeCrackedPasswordsToCSV(outputPath);
 
         return time;
     }
@@ -167,50 +131,23 @@ public class DictionaryAttack {
      * Writes the successfully cracked user credentials to a CSV file.
      */
     static void writeCrackedPasswordsToCSV(String filePath) {
-        File file = new File(filePath);
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+        try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(filePath), StandardCharsets.UTF_8)) {
             writer.write("user_name,hashed_password,plain_password\n");
-
-            users.stream()
-                    .filter(user -> user.isFound)
-                    .map(user -> String.format("%s,%s,%s%n",
-                            user.username,
-                            user.hashedPassword,
-                            user.foundPassword))
-                    .forEach(line -> {
-                        try {
-                            writer.write(line);
-                        } catch (IOException e) {
-                            throw new UncheckedIOException(e);
-                        }
-                    });
+            StringBuilder sb = new StringBuilder(users.size() * 64);
+            for (User user : users) {
+                if (user.isFound) {
+                    sb.append(user.username).append(',')
+                            .append(user.hashedPassword).append(',')
+                            .append(user.foundPassword).append('\n');
+                }
+            }
+            writer.write(sb.toString());
 
             System.out.println("\nCracked password details have been written to " + filePath);
         } catch (IOException e) {
             System.err.println("Error: Could not write to CSV file: " + e.getMessage());
         }
     }
-
-    // Load passwords & load users using Streams
-    // static List<String> loadDictionary(String filePath) throws IOException {
-    // try (Stream<String> stream = Files.lines(Paths.get(filePath))) {
-    // return stream.parallel() // use parallel stream
-    // .collect(Collectors.toList());
-    // }
-    // }
-
-    // static void loadUsers(String filename) throws IOException {
-    // try (Stream<String> stream = Files.lines(Paths.get(filename))) {
-    // stream.parallel().forEach(line -> {
-    // String[] parts = line.split(",");
-    // if (parts.length >= 2) {
-    // String username = parts[0];
-    // String hashedPassword = parts[1];
-    // users.put(username, new User(username, hashedPassword));
-    // }
-    // });
-    // }
-    // }
 
     // Load passwords & load users using BufferedReader
     static List<String> loadDictionary(String filePath) throws IOException {
