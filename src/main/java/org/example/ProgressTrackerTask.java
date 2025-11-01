@@ -5,6 +5,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class ProgressTrackerTask implements Runnable {
+    private final int FREQUENCY = 1000;
     private final int totalUsers;
     private AtomicInteger passwordsFound;
     private AtomicInteger tasksCompleted;
@@ -27,7 +28,7 @@ public class ProgressTrackerTask implements Runnable {
                 break;  // Exit before checkpoint calculation
             }
             
-            int currentCheckpoint = (currentTasks / 1000) * 1000;
+            int currentCheckpoint = (currentTasks / FREQUENCY) * FREQUENCY;
 
             if (currentCheckpoint > lastReported && currentCheckpoint > 0) {
                 double progressPercent = (double) currentTasks / totalUsers * 100;
